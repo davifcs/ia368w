@@ -1,13 +1,3 @@
-#!/usr/bin/env python
-# coding: utf-8
-
-# ### Bibliotecas
-# 
-# O desenvolvimento do **exercício** se deu na linguagem de programção Python e as bibliotecas utilizadas são as que seguem abaixo.
-
-# In[1]:
-
-
 import numpy as np
 import matplotlib
 import matplotlib.pyplot as plt
@@ -15,27 +5,14 @@ from matplotlib import cm
 from mpl_toolkits.mplot3d import Axes3D
 import time
 import restthru
-import time
-
-
-# ### Acesso a API por meio de grupo de recurso
-
-# In[2]:
-
 
 host = 'http://127.0.0.1:4950'
 restthru.http_init()
 distances = '/group/laserpose'
 
-
-# ### Parâmetros para teste
-
-# In[3]:
-
-
 tamCel = 50
-numCelX = 100
-numCelY = 100 
+numCelX = 80
+numCelY = 80
 
 precisao = 50 
 passo = 1*np.pi/180
@@ -46,12 +23,6 @@ Pmin = 0.4
 x = np.linspace(0, numCelX, numCelX)
 y = np.linspace(0, numCelY, numCelY)
 xx, yy = np.meshgrid(x, y)
-
-
-# ### Função para leitura de sensores
-
-# In[4]:
-
 
 def sensing():
     res,_ = restthru.http_get(host+distances)
@@ -69,12 +40,6 @@ def sensing():
     fi = np.asarray(fi)
     mu_array = np.vstack((dist, fi)).T
     return px, py, pth, mu_array
-
-
-# ### Mapeamento por meio do modelo inverso de sensor
-
-# In[5]:
-
 
 for K, sigma in K_sigma_array:
     mapa = np.zeros([numCelX,numCelY])
@@ -114,32 +79,20 @@ for K, sigma in K_sigma_array:
                             P = 0.5
                         delta[0]  = delta[0]/1000
                         z[j][i] = P + (K/(2*np.pi*np.dot(sigma[0][0],sigma[1][1])) + 0.5 - P)*np.exp(-0.5 * (np.dot(np.dot(delta,invSigma),delta.T)))
-                        #if abs(mapa[j][i]) < 0.8:
-                        #    mapa[j][i] = mapa[j][i] + np.log(z[j][i]/(1-z[j][i]))
-                        if abs(mapa[j][i]) < np.log(z[j][i]/(1-z[j][i])):  
-                            mapa[j][i] = mapa[j][i] + np.log(z[j][i]/(1-z[j][i]))
+                        mapa[j][i] = mapa[j][i] + np.log(z[j][i]/(1-z[j][i]))
                         if z[j][i] > maximo:
                             maximo = z[j][i]
         cycle = time.time()
         diff = int(cycle-start)
-        
-        if diff > 2:
+    
+        if diff > 30:
             start = time.time()
             graph += 1
             ax = fig.add_subplot(2, 2, graph, projection='3d')   
             ax.plot_surface(xx,yy,mapa, cmap=cm.coolwarm, linewidth=0, antialiased=False)
+            ax.view_init(azim=-45, elev=45)
     print("z máximo", maximo)
-    plt.show()
-
-
-# In[ ]:
-
-
-
-
-
-# In[ ]:
-
+    fig.savefig(str(K[0]) + ".png") 
 
 
 
