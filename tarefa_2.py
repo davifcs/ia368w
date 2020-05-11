@@ -11,10 +11,10 @@ b = 165
 sigma_x = 0.5
 sigma_y = 0.5
 sigma_th = 0.03
-timespan = 3
+timespan = 1
 
 def calculateEllipse(x,y,a,b,angle,steps=36):
-    beta = -angle
+    beta = -angle*np.pi/180
     sinbeta = np.sin(beta)
     cosbeta = np.cos(beta)
     
@@ -55,31 +55,42 @@ R = np.matrix([[sigma_x,0,0],[0,sigma_y,0],[0,0,sigma_th]])
 
 l_old = 0
 r_old = 0
-th_old = 0
+th_kinematic_old = 0
 s = 0
 sigma_p_old = np.zeros([3,3])
+x_kinematic, y_kinematic, th_kinematic = getPose()
+kinematic  = np.array([x_kinematic,y_kinematic,th_kinematic])
+
 
 i = 0
 plt.ion()
 fig, ax = plt.subplots()
 
-while(i < 10):
-    x,y,th = getPose()
-    l,r = getVel()
+while(i < 100):
+    l_vel,r_vel = getVel()
+
+    l = l_vel * timespan
+    r = r_vel * timespan
+
+    print(l, r)
+
+    l = l + l_old
+    r = r + r_old
 
     delta_l = l - l_old
     delta_r = r - r_old
-    delta_th = th - th_old
 
-    delta_s = (delta_l + delta_r)/2 * timespan 
+    delta_th = (delta_l + delta_r)/(2*b)*np.pi/180
 
-    nabla_p_f = np.matrix([[1, 0, -delta_s*np.sin(th+delta_th/2)], [0, 1, delta_s*np.cos(th+th/2)], [0, 0, 1]])
+    delta_s = (delta_l + delta_r)/2 
 
-    nabla_s_f = np.matrix([[1/2*np.cos(th+delta_th/2) - delta_s/(4*b)*np.sin(th+delta_th/2), 1/2*np.cos(th+delta_th/2) + delta_s/(4*b)*np.sin(th+delta_th/2)], [1/2*np.sin(th+delta_th/2) - delta_s/(4*b)*np.cos(th+delta_th/2), 1/2*np.sin(th+delta_th/2) + delta_s/(4*b)*np.sin(th+delta_th/2)], [1/(2*b), -1/(2*b)]])
+    nabla_p_f = np.matrix([[1, 0, -delta_s*np.sin(th_kinematic+delta_th/2)], [0, 1, delta_s*np.cos(th_kinematic+delta_th/2)], [0, 0, 1]])
+
+    nabla_s_f = np.matrix([[1/2*np.cos(th_kinematic+delta_th/2) - delta_s/(4*b)*np.sin(th_kinematic+delta_th/2), 1/2*np.cos(th_kinematic+delta_th/2) + delta_s/(4*b)*np.sin(th_kinematic+delta_th/2)], [1/2*np.sin(th_kinematic+delta_th/2) + delta_s/(4*b)*np.cos(th_kinematic+delta_th/2), 1/2*np.sin(th_kinematic+delta_th/2) - delta_s/(4*b)*np.cos(th_kinematic+delta_th/2)], [1/(2*b), -1/(2*b)]])
 
     sigma_delta_s = np.matrix([[Ks * np.abs(delta_r),0],[0,Ks * np.abs(delta_l)]])
 
-    sigma_p = np.matrix(np.dot(np.dot(nabla_p_f,sigma_p_old),nabla_p_f.T) + np.dot(np.dot(nabla_s_f,sigma_delta_s),nabla_s_f.T))
+    sigma_p = np.matrix(np.dot(np.dot(nabla_p_f,sigma_p_old),nabla_p_f.T) + np.dot(np.dot(nabla_s_f,sigma_delta_s),nabla_s_f.T)) + R
     
     sigma_x = np.sqrt(sigma_p[0,0])
     sigma_y = np.sqrt(sigma_p[1,1])
@@ -93,22 +104,36 @@ while(i < 10):
     elif beta < - np.pi:
         beta = beta+2*np.pi
 
-    
-    print(beta)
+    kinematic_next =  np.array([(delta_r+delta_l)/2*np.cos(th_kinematic+(delta_r-delta_l)/(4*b)),(delta_r+delta_l)/2*np.sin(th_kinematic+(delta_r-delta_l)/(4*b)),(delta_r-delta_l)/(2*b)])
+    kinematic = kinematic + kinematic_next
 
-    X,Y = calculateEllipse(x,y,a,b,beta)
-    
-    ax.quiver(x,y,np.cos(th),np.sin(th))
-    
-    ax.scatter(x,y)
-    ax.plot(X,Y)
+    x_kinematic = kinematic[0]
+    y_kinematic = kinematic[1]
+    th_kinematic = kinematic[2]
+
+    # if th_kinematic > np.pi:
+    #     th_kinematic = th_kinematic-2*np.pi
+    # elif th_kinematic < - np.pi:
+    #     beth_kinematicta = th_kinematic+2*np.pi
+
+
+    # X,Y = calculateEllipse(x_kinematic,y_kinematic,a,b,beta)
+    ax.quiver(x_kinematic,y_kinematic,np.cos(th_kinematic),np.sin(th_kinematic))
+    ax.scatter(x_kinematic,y_kinematic)
+    # ax.plot(X,Y)
+
+
+    # x_odometry,y_odometry,th_odometry = getPose()
+    # ax.quiver(x_odometry,y_odometry,np.cos(th_odometry),np.sin(th_odometry))
+    # ax.scatter(x_odometry,y_odometry)
+
     plt.pause(timespan)
     plt.draw()
     i += 1
 
     l_old = l
     r_old = r
-    th_old = th
+    th_old = th_kinematic
     sigma_p_old = sigma_p
 
 
