@@ -6,12 +6,12 @@ import restthru
 host = 'http://127.0.0.1:4950'
 restthru.http_init()
 
-Ks = 0.05
+Ks = 0.5
 axis = 165
 R_sigma_x = 0.5
 R_sigma_y = 0.5
 R_sigma_th = 0.03
-timespan = 1
+timespan = 3
 
 def calculateEllipse(x,y,a,b,angle,steps=36):
     beta = -angle*np.pi/180
@@ -72,23 +72,18 @@ while(i < 100):
     l = l_vel * timespan
     r = r_vel * timespan
 
-    print(l, r)
-
     l = l + l_old
     r = r + r_old
 
     delta_l = l - l_old
     delta_r = r - r_old
 
-    #delta_th = (delta_r + delta_l)/(2*axis)
-    delta_th = (delta_r - delta_l)/(axis)
+    delta_th = (delta_r + delta_l)/(2*axis)
 
     if delta_th > np.pi:
         delta_th = delta_th-2*np.pi
     elif delta_th < - np.pi:
         delta_th = delta_th+2*np.pi
-
-    print(delta_th)
 
     delta_s = (delta_l + delta_r)/2 
 
@@ -100,9 +95,12 @@ while(i < 100):
 
     sigma_p = np.matrix(np.dot(np.dot(nabla_p_f,sigma_p_old),nabla_p_f.T) + np.dot(np.dot(nabla_s_f,sigma_delta_s),nabla_s_f.T)) + R
     
+    print(np.linalg.det(sigma_p))
+    
     sigma_x = np.sqrt(sigma_p[0,0])
     sigma_y = np.sqrt(sigma_p[1,1])
     sigma_xy = sigma_p[1,0]
+    
     a = np.sqrt(1/2*(sigma_x**2+sigma_y**2+np.sqrt((sigma_y**2-sigma_x**2)**2+4*sigma_xy**2)))
     b = np.sqrt(1/2*(sigma_x**2+sigma_y**2-np.sqrt((sigma_y**2-sigma_x**2)**2+4*sigma_xy**2)))
 
@@ -121,13 +119,13 @@ while(i < 100):
 
 
     X,Y = calculateEllipse(x_kinematic,y_kinematic,a,b,beta)
-    ax.quiver(x_kinematic,y_kinematic,np.cos(th_kinematic),np.sin(th_kinematic))
-    ax.scatter(x_kinematic,y_kinematic)
+    ax.quiver(x_kinematic,y_kinematic,np.cos(th_kinematic),np.sin(th_kinematic),width=0.0005)
+    ax.scatter(x_kinematic,y_kinematic,color='r')
     ax.plot(X,Y)
 
     x_odometry,y_odometry,th_odometry = getPose()
-    ax.quiver(x_odometry,y_odometry,np.cos(th_odometry),np.sin(th_odometry))
-    ax.scatter(x_odometry,y_odometry)
+    ax.quiver(x_odometry,y_odometry,np.cos(th_odometry),np.sin(th_odometry),width=0.0005)
+    ax.scatter(x_odometry,y_odometry,color='b')
 
     plt.pause(timespan)
     plt.draw()
