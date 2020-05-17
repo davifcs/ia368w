@@ -8,10 +8,10 @@ restthru.http_init()
 
 Ks = 0.5
 axis = 165
-R_sigma_x = 0.5
-R_sigma_y = 0.5
-R_sigma_th = 0.03
-timespan = 3
+R_sigma_x = 0.05
+R_sigma_y = 0.05
+R_sigma_th = 0.003
+timespan = 2
 
 def calculateEllipse(x,y,a,b,angle,steps=36):
     beta = -angle*np.pi/180
@@ -29,6 +29,14 @@ def calculateEllipse(x,y,a,b,angle,steps=36):
 
     return X,Y
 
+def normAngle(angle):
+    if angle > np.pi:
+        angle = angle-2*np.pi
+    elif angle < - np.pi:
+        angle = angle+2*np.pi
+    
+    return angle
+
 def getPose():
     pose = "/motion/pose"
     res,_ = restthru.http_get(host+pose)
@@ -36,10 +44,7 @@ def getPose():
     px = res["x"]
     py = res["y"]
     pth = res["th"]*np.pi/180
-    if pth > np.pi:
-        pth = pth-2*np.pi
-    elif pth < - np.pi:
-        pth = pth+2*np.pi
+    pth = normAngle(pth)
 
     return px, py, pth
 
@@ -50,7 +55,7 @@ def getVel():
     r = res["right"]
 
     return l,r
-  
+
 R = np.matrix([[R_sigma_x,0,0],[0,R_sigma_y,0],[0,0,R_sigma_th]])
 
 l_old = 0
@@ -61,12 +66,12 @@ sigma_p_old = np.zeros([3,3])
 x_kinematic, y_kinematic, th_kinematic = getPose()
 kinematic  = np.array([x_kinematic,y_kinematic,th_kinematic])
 
-
-i = 0
 plt.ion()
 fig, ax = plt.subplots()
+plt.xlim(0,5000)
+plt.ylim(0,5000)
 
-while(i < 100):
+while(True):
     l_vel,r_vel = getVel()
 
     l = l_vel * timespan
@@ -78,13 +83,10 @@ while(i < 100):
     delta_l = l - l_old
     delta_r = r - r_old
 
-    delta_th = (delta_r + delta_l)/(2*axis)
+    delta_th = (delta_r - delta_l)/(2*axis)
 
-    if delta_th > np.pi:
-        delta_th = delta_th-2*np.pi
-    elif delta_th < - np.pi:
-        delta_th = delta_th+2*np.pi
-
+    delta_th = normAngle(delta_th)
+    
     delta_s = (delta_l + delta_r)/2 
 
     nabla_p_f = np.matrix([[1, 0, -delta_s*np.sin(th_kinematic+delta_th/2)], [0, 1, delta_s*np.cos(th_kinematic+delta_th/2)], [0, 0, 1]])
@@ -105,20 +107,19 @@ while(i < 100):
     b = np.sqrt(1/2*(sigma_x**2+sigma_y**2-np.sqrt((sigma_y**2-sigma_x**2)**2+4*sigma_xy**2)))
 
     beta = 1/2*(np.arctan(2*sigma_xy/(sigma_y**2-sigma_x**2)))
-    if beta > np.pi:
-        beta = beta-2*np.pi
-    elif beta < - np.pi:
-        beta = beta+2*np.pi
+
+    beta = normAngle(beta)
 
     kinematic_next =  np.array([(delta_r+delta_l)/2*np.cos(th_kinematic+(delta_r-delta_l)/(4*axis)),(delta_r+delta_l)/2*np.sin(th_kinematic+(delta_r-delta_l)/(4*axis)),(delta_r-delta_l)/(2*axis)])
     kinematic = kinematic + kinematic_next
-
+    
     x_kinematic = kinematic[0]
     y_kinematic = kinematic[1]
     th_kinematic = kinematic[2]
 
-
-    X,Y = calculateEllipse(x_kinematic,y_kinematic,a,b,beta)
+    th_kinematic = normAngle(th_kinematic)
+   
+    X,Y = calculateEllipse(x_kinematic,y_kinematic,b,a,beta)
     ax.quiver(x_kinematic,y_kinematic,np.cos(th_kinematic),np.sin(th_kinematic),width=0.0005)
     ax.scatter(x_kinematic,y_kinematic,color='r')
     ax.plot(X,Y)
@@ -129,7 +130,6 @@ while(i < 100):
 
     plt.pause(timespan)
     plt.draw()
-    i += 1
 
     l_old = l
     r_old = r
