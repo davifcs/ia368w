@@ -136,11 +136,9 @@ def SplitAndMerge(global_poses):
             i2 = n  # i2 assume novamente o ultimo valor possivel
 
     # Fim do SPLIT AND MERGE
-
     Points = np.array([PointsX, PointsY, NPoints])
 
     # Plotagem das retas (opcional)
-
     plt.plot(PointsX, PointsY)
     plt.show()
 
