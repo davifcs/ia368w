@@ -111,14 +111,13 @@ def SplitAndMerge(global_poses):
             # Encotre o indice do ponto que possui a maior distancia.
             # Se houver mais de um ponto, utilize o primeiro que encontrar.
             ind = np.where( maxd == d)
-            ind = ind[0]
             # Gera novo subgrupo de analise (SPLIT)
             # O indice encontrado refere-se ao subgrupo analisado e nao ao
             # indice global, ou seja, referente a todos os dados.
             # Por isso, soma-se o indice i1 ao indice encontrado. Desconta-se 1
             # porque a primeira posicao de um vetor do MATLAB difere do C++. 
             # No C++ o primeiro indice de um vetor vale 0. No MATLAB vale 1.
-            i2 = i1 + ind - 1
+            i2 = i1 + ind[0][0] 
             # O indice i1 permanece inalterado nesta fase.
         else: # Se o ponto pertence a reta
             # -----
@@ -133,7 +132,7 @@ def SplitAndMerge(global_poses):
             NPoints.append(0)
             # Altere os indices do intervalo de analise para continuar
             i1 = i2 # i1 assume o valor de i2
-            i2 = n  # i2 assume novamente o ultimo valor possivel
+            i2 = n-1  # i2 assume novamente o ultimo valor possivel
 
     # Fim do SPLIT AND MERGE
     Points = np.array([PointsX, PointsY, NPoints])
