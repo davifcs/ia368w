@@ -57,11 +57,16 @@ epsRange = 100
 
 epsBearing = 4*np.pi/180
 
+L_x = [0,  0,   920,  920,  4190,  4680, 4190,  4030, 4680]
+L_y = [0,  2280, 2280, 3200, 2365,  2365, 3200,  0,    650]
+
+L = np.array([L_x,L_y])
+
 # ---------------------------------------
 
 # Passo 1 - Split and Merge
 
-def FeatureDetection(global_poses, L, Pose):
+def FeatureDetection(global_poses, Pose):
   Points = SplitAndMerge(global_poses)
 
   if (len(Points) < 3):   # unica reta ?
@@ -96,22 +101,46 @@ def FeatureDetection(global_poses, L, Pose):
 
   z_bearing = np.arctan2(l_y - Pose['y'], l_x - Pose['x']) - Pose['th'] # [rad]
 
-  Features = []
+  detected_x = []
+  detected_y = []
+  real_x = []
+  real_y = []
+  deltaBearing_array = []
+  z_range_array = []
+  z_bearing_array = []
+  Z_range_array = []
+  Z_bearing_array = []
 
   for i in range(0,len(z_range)):
     for j in range(0,len(Z_range)):
         deltaRange = abs(z_range[i] - Z_range[j])
         deltaBearing = abs(z_bearing[i] - Z_bearing[j])
         if (deltaRange < epsRange and deltaBearing < epsBearing):
-          Features.append(l_x[i])
-          Features.append(l_y[i])
-          Features.append(L_x[j])
-          Features.append(L_y[j])
-          Features.append(deltaBearing)
+          detected_x.append(l_x[i])
+          detected_y.append(l_y[i])
+          real_x.append(L_x[j])
+          real_y.append(L_y[j])
+          deltaBearing_array.append(deltaBearing)
+          z_range_array.append(z_range[i])
+          z_bearing_array.append(z_bearing[i])
+          Z_range_array.append(Z_range[j])
+          Z_bearing_array.append(Z_bearing[j])
 
-  plt.scatter(L_x , L_y,color='r')
-  plt.scatter(l_x , l_y,color='b')
+  plt.scatter(L_x , L_y,color='red')
+  plt.scatter(detected_x,detected_y,color='green')
+  plt.scatter(l_x , l_y,color='blue')
   plt.show()
 
-  return Features
+  return detected_x, detected_y, real_x, real_y, deltaBearing_array, z_range_array, z_bearing_array, Z_range_array, Z_bearing_array
   
+# import restthru
+
+# host = 'http://127.0.0.1:4950'
+# restthru.http_init()
+# global_poses_request = "/perception/laser/1/global_poses"
+# global_poses,_ = restthru.http_get(host+global_poses_request)
+
+# pose_request = "/motion/pose"
+# pose, _ = restthru.http_get(host+pose_request)
+
+# print(FeatureDetection(global_poses,pose))
