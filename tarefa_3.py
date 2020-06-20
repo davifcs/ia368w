@@ -8,11 +8,11 @@ host = 'http://127.0.0.1:4950'
 restthru.http_init()
 
 Ks = 0.05
-axis = 165
+b_axis = 165
 R_sigma_x = 5
 R_sigma_y = 5
 R_sigma_th = 3*np.pi/180
-timespan = 2
+timespan = 0.001
 
 L_x = [0,  0,   920,  920,  4190,  4680, 4190,  4030, 4680]
 L_y = [0,  2280, 2280, 3200, 2365,  2365, 3200,  0,    650]
@@ -49,13 +49,10 @@ def normAngle(angle):
 def getPose():
     pose = "/motion/pose"
     res,_ = restthru.http_get(host+pose)
+    
+    res['th'] = normAngle(res["th"]*np.pi/180)
 
-    px = res["x"]
-    py = res["y"]
-    pth = res["th"]*np.pi/180
-    pth = normAngle(pth)
-
-    return px, py, pth
+    return res
 
 def getVel():
     vel2 = "/motion/vel2"
@@ -64,12 +61,19 @@ def getVel():
     return res["left"], res["right"]
     
 def getGlobalPose():
-    global_pose = "/perception/laser/n/global_poses"
+    global_pose = "/perception/laser/1/global_poses"
     res,_ = restthru.http_get(host+global_pose)
 
     return res
 
+def postPose(delta_pose):
+    pose = '/motion/pose'
+    res,_ = restthru.http_post(host+pose,delta_pose)
+
+
 PoseR = getPose()
+theta_t_old = PoseR['th']
+
 sigma_p_old = np.zeros([3,3])
 
 R = np.matrix([[R_sigma_x,0,0],[0,R_sigma_y,0],[0,0,R_sigma_th]])
@@ -94,65 +98,63 @@ while(True):
     delta_s_l = l_vel * timespan
     delta_s_r = r_vel * timespan
 
-    delta_th = (delta_s_r - delta_s_l)/(2*axis)
+    delta_theta_t = (delta_s_r - delta_s_l)/(2*b_axis)
 
     delta_s_t = (delta_s_r + delta_s_l)/2
 
-    delta_th = normAngle(delta_th)
+    delta_theta_t = normAngle(delta_theta_t)
     
-    G_t = np.matrix([1,0,-delta_s_t*np.sin(theta_t_old+delta_theta_t/2)],[0,1,delta_s_t*np.cos(theta_t_old+delta_theta_t/2)],[0,0,1])
+    G_t = np.matrix([[1,0,-delta_s_t*np.sin(theta_t_old+delta_theta_t/2)],[0,1,delta_s_t*np.cos(theta_t_old+delta_theta_t/2)],[0,0,1]])
 
-    a = 1/2*np.cos(theta_t_old+delta_theta_t/2)-delta_s_t/(4*b)*np.sin(theta_old+delta_theta_t/2)
-    b = 1/2*np.sin(theta_t_old+delta_theta_t/2)+delta_s_t/(4*b)*np.cos(theta_old+delta_theta_t/2)
-    c = 1/2*np.cos(theta_t_old+delta_theta_t/2)+delta_s_t/(4*b)*np.sin(theta_old+delta_theta_t/2)
-    d = 1/2*np.sin(theta_t_old+delta_theta_t/2)-delta_s_t/(4*b)*np.cos(theta_old+delta_theta_t/2)
+    a = 1/2*np.cos(theta_t_old+delta_theta_t/2)-delta_s_t/(4*b_axis)*np.sin(theta_t_old+delta_theta_t/2)
+    b = 1/2*np.sin(theta_t_old+delta_theta_t/2)+delta_s_t/(4*b_axis)*np.cos(theta_t_old+delta_theta_t/2)
+    c = 1/2*np.cos(theta_t_old+delta_theta_t/2)+delta_s_t/(4*b_axis)*np.sin(theta_t_old+delta_theta_t/2)
+    d = 1/2*np.sin(theta_t_old+delta_theta_t/2)-delta_s_t/(4*b_axis)*np.cos(theta_t_old+delta_theta_t/2)
 
-    V_t = np.matrix([a,b],[c,d],[1/(2*b),-1/(2*b)])
-
-    # nabla_p_f = np.matrix([[1, 0, -delta_s*np.sin(th_kinematic+delta_th/2)], [0, 1, delta_s*np.cos(th_kinematic+delta_th/2)], [0, 0, 1]])
-
-    # nabla_s_f = np.matrix([[1/2*np.cos(th_kinematic+delta_th/2) - delta_s/(4*axis)*np.sin(th_kinematic+delta_th/2), 1/2*np.cos(th_kinematic+delta_th/2) + delta_s/(4*axis)*np.sin(th_kinematic+delta_th/2)], [1/2*np.sin(th_kinematic+delta_th/2) + delta_s/(4*axis)*np.cos(th_kinematic+delta_th/2), 1/2*np.sin(th_kinematic+delta_th/2) - delta_s/(4*axis)*np.sin(th_kinematic+delta_th/2)], [1/(2*axis), -1/(2*axis)]])
+    V_t = np.matrix([[a,b],[c,d],[1/(2*b_axis),-1/(2*b_axis)]])
 
     sigma_delta_t = np.matrix([[Ks * np.abs(delta_s_r),0],[0,Ks * np.abs(delta_s_l)]])
 
-    sigma_t = np.matrix(np.dot(np.dot(G_t,sigma_p_old),G_t.T) + np.dot(np.dot(V_t,sigma_delta_t),V_t.T)) + R
-    
-    print(np.linalg.det(sigma_t))
-    
+    sigma_t = np.dot(np.dot(G_t,sigma_p_old),G_t.T) + np.dot(np.dot(V_t,sigma_delta_t),V_t.T) + R
+        
     # Update step
     time.sleep(2)
 
-    global_poses = getGlobalPose
-    x_t, y_t, th_t = getPose()
+    global_poses = getGlobalPose()
+    PoseR = getPose()
+    x_t = PoseR['x']
+    y_t = PoseR['y']
 
     detected_x, detected_y, real_x, real_y, deltaBearing_array, z_range_array, z_bearing_array, Z_range_array, Z_bearing_array = FeatureDetection(global_poses, PoseR)
     
-    H_t = 0
-    Q_t = 0
-    zsensor_t = 0
-    zreal_t = 0
-
-    for l_x, l_y, L_x, L_y, z_range, z_bearing, Z_range, Z_bearing in detected_x, detected_y, real_x, real_y, z_range_array, z_bearing_array, Z_range_array, Z_bearing_array:   
+    H_t = np.array([])
+        
+    for (l_x, l_y, L_x, L_y, z_range, z_bearing, Z_range, Z_bearing) in zip(detected_x, detected_y, real_x, real_y, z_range_array, z_bearing_array, Z_range_array, Z_bearing_array):   
         q = (L_x - x_t)**2 + (L_y - y_t)**2
-        if H_t == 0:
-            H_t = np.matrix([-L_x-x_t/np.sqrt(q),-L_y-y_t/np.sqrt(q),0],[L_y-y_t/q,-L_x-x_t/q,-1])
-            Q_t = np.matrix([sigma_l_d**2,0],[0,sigma_l_theta**2])
-            zsensor_t = np.matrix([z_range],[z_bearing])
-            zreal_t = np.matrix([Z_range],[Z_bearing])
+        if H_t.size == 0:
+            H_t = np.matrix([[-L_x-x_t/np.sqrt(q),-L_y-y_t/np.sqrt(q),0],[L_y-y_t/q,-L_x-x_t/q,-1]])
+            Q_t_array = np.array([sigma_l_d**2,sigma_l_theta**2])
+            zsensor_t = np.matrix([[z_range],[z_bearing]])
+            zreal_t = np.matrix([[Z_range],[Z_bearing]])
         
         else: 
-            H_t = np.vstack((H_t, np.matrix([-L_x-x_t/np.sqrt(q),-L_y-y_t/np.sqrt(q),0],[L_y-y_t/q,-L_x-x_t/q,-1])))
-            Q_t = np.vstack((Q_t,np.matrix([sigma_l_d**2,0],[0,sigma_l_theta**2])))
-            zsensor_t = np.vstack((zsensor_t,np.matrix([z_range],[z_bearing])))
-            zreal_t = np.vstack((zreal_t,np.matrix([Z_range],[Z_bearing])))
-    
-    K_t = np.dot(np.dot(sigma_t,H_t.T),np.inv(np.dot(np.dot(H_t,sigma_t),H_t.T)+Q_t))
+            H_t = np.vstack((H_t, np.matrix([[-L_x-x_t/np.sqrt(q),-L_y-y_t/np.sqrt(q),0],[L_y-y_t/q,-L_x-x_t/q,-1]])))
+            Q_t_array = np.hstack((Q_t_array,np.array([sigma_l_d**2,sigma_l_theta**2])))
+            zsensor_t = np.vstack((zsensor_t,np.matrix([[z_range],[z_bearing]])))
+            zreal_t = np.vstack((zreal_t,np.matrix([[Z_range],[Z_bearing]])))
+
+    Q_t = np.eye(Q_t_array.size)
+    row, col = np.diag_indices(Q_t_array.shape[0])
+    Q_t[row,col] = Q_t_array
+
+    K_t = np.dot(np.dot(sigma_t,H_t.T),np.linalg.inv(np.dot(np.dot(H_t,sigma_t),H_t.T)+Q_t))
     INOVA = zsensor_t - zreal_t
 
     DeltaP = np.dot(K_t,INOVA)
-    x_t = x_t + np.dot(K_t,INOVA)[0]
-    y_t = y_t + np.dot(K_t,INOVA)[1]
-    th_t = th_t + np.dot(K_t,INOVA)[2]
+    
+    postPose(DeltaP.tolist())
+
+    sigma_t = np.eye(3) - np.dot(np.dot(K_t,H_t),sigma_t)
 
     sigma_x = np.sqrt(sigma_t[0,0])
     sigma_y = np.sqrt(sigma_t[1,1])
@@ -164,30 +166,22 @@ while(True):
     beta = 1/2*(np.arctan(2*sigma_xy/(sigma_y**2-sigma_x**2)))
 
     beta = normAngle(beta)
-
-    kinematic_next =  np.array([(delta_r+delta_l)/2*np.cos(th_kinematic+(delta_r-delta_l)/(4*axis)),(delta_r+delta_l)/2*np.sin(th_kinematic+(delta_r-delta_l)/(4*axis)),(delta_r-delta_l)/(2*axis)])
-    kinematic = kinematic + kinematic_next
-    
-    x_kinematic = kinematic[0]
-    y_kinematic = kinematic[1]
-    th_kinematic = kinematic[2]
-
-    th_kinematic = normAngle(th_kinematic)
    
-    X,Y = calculateEllipse(x_kinematic,y_kinematic,b,a,beta)
-    ax.quiver(x_kinematic,y_kinematic,np.cos(th_kinematic),np.sin(th_kinematic),width=0.0005)
-    ax.scatter(x_kinematic,y_kinematic,color='r')
-    ax.plot(X,Y)
+    PoseR = getPose()
 
-    x_odometry,y_odometry,th_odometry = getPose()
+    x_odometry = PoseR['x']
+    y_odometry = PoseR['y']
+    th_odometry = PoseR['th'] 
+
+    X,Y = calculateEllipse(x_odometry,y_odometry,b,a,beta)
+
     ax.quiver(x_odometry,y_odometry,np.cos(th_odometry),np.sin(th_odometry),width=0.0005)
-    ax.scatter(x_odometry,y_odometry,color='b')
+    ax.scatter(x_odometry,y_odometry,color='r')
+    
+    ax.plot(X,Y)
 
     plt.pause(timespan)
     plt.draw()
-
-    th_old = th_kinematic
-    sigma_p_old = sigma_p
 
 
 
