@@ -126,10 +126,10 @@ def FeatureDetection(global_poses, Pose):
           Z_range_array.append(Z_range[j])
           Z_bearing_array.append(Z_bearing[j])
 
-  # plt.scatter(L_x , L_y,color='red')
-  # plt.scatter(detected_x,detected_y,color='green')
-  # plt.scatter(l_x , l_y,color='blue')
-  # plt.show()
+  plt.scatter(L_x , L_y,color='red')
+  plt.scatter(detected_x,detected_y,color='green')
+  plt.scatter(l_x , l_y,color='blue')
+  plt.show()
 
   return detected_x, detected_y, real_x, real_y, deltaBearing_array, z_range_array, z_bearing_array, Z_range_array, Z_bearing_array
   

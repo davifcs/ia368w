@@ -12,15 +12,16 @@ b_axis = 165
 R_sigma_x = 5
 R_sigma_y = 5
 R_sigma_th = 3*np.pi/180
-timespan = 0.001
+sigma_l_d = 0.5
+sigma_l_theta = 0.1 * np.pi/180
+
+timespan = 0.5
 
 L_x = [0,  0,   920,  920,  4190,  4680, 4190,  4030, 4680]
 L_y = [0,  2280, 2280, 3200, 2365,  2365, 3200,  0,    650]
 
 L = np.array([L_x,L_y])
 
-sigma_l_d = 0.5
-sigma_l_theta = 0.1 * np.pi/180
 
 def calculateEllipse(x,y,a,b,angle,steps=36):
     beta = -angle*np.pi/180
@@ -73,23 +74,15 @@ def postPose(delta_pose):
 
 PoseR = getPose()
 theta_t_old = PoseR['th']
-
-sigma_p_old = np.zeros([3,3])
+sigma_t_old = np.zeros([3,3])
 
 R = np.matrix([[R_sigma_x,0,0],[0,R_sigma_y,0],[0,0,R_sigma_th]])
 
-l_old = 0
-r_old = 0
-th_kinematic_old = 0
-s = 0
-sigma_p_old = np.zeros([3,3])
-x_kinematic, y_kinematic, th_kinematic = getPose()
-kinematic  = np.array([x_kinematic,y_kinematic,th_kinematic])
 
 plt.ion()
 fig, ax = plt.subplots()
-plt.xlim(0,5000)
-plt.ylim(0,5000)
+plt.xlim(-2000,5000)
+plt.ylim(-2000,5000)
 
 while(True):    
     #Prediction step
@@ -99,11 +92,10 @@ while(True):
     delta_s_r = r_vel * timespan
 
     delta_theta_t = (delta_s_r - delta_s_l)/(2*b_axis)
+    delta_theta_t = normAngle(delta_theta_t)
 
     delta_s_t = (delta_s_r + delta_s_l)/2
 
-    delta_theta_t = normAngle(delta_theta_t)
-    
     G_t = np.matrix([[1,0,-delta_s_t*np.sin(theta_t_old+delta_theta_t/2)],[0,1,delta_s_t*np.cos(theta_t_old+delta_theta_t/2)],[0,0,1]])
 
     a = 1/2*np.cos(theta_t_old+delta_theta_t/2)-delta_s_t/(4*b_axis)*np.sin(theta_t_old+delta_theta_t/2)
@@ -115,30 +107,34 @@ while(True):
 
     sigma_delta_t = np.matrix([[Ks * np.abs(delta_s_r),0],[0,Ks * np.abs(delta_s_l)]])
 
-    sigma_t = np.dot(np.dot(G_t,sigma_p_old),G_t.T) + np.dot(np.dot(V_t,sigma_delta_t),V_t.T) + R
+    sigma_t_ = np.dot(np.dot(G_t,sigma_t_old),G_t.T) + np.dot(np.dot(V_t,sigma_delta_t),V_t.T) + R
         
     # Update step
-    time.sleep(2)
+    time.sleep(timespan)
 
     global_poses = getGlobalPose()
     PoseR = getPose()
     x_t = PoseR['x']
     y_t = PoseR['y']
+    theta_t = PoseR['th']
 
     detected_x, detected_y, real_x, real_y, deltaBearing_array, z_range_array, z_bearing_array, Z_range_array, Z_bearing_array = FeatureDetection(global_poses, PoseR)
     
+    if  not detected_x:
+        continue
+
     H_t = np.array([])
         
     for (l_x, l_y, L_x, L_y, z_range, z_bearing, Z_range, Z_bearing) in zip(detected_x, detected_y, real_x, real_y, z_range_array, z_bearing_array, Z_range_array, Z_bearing_array):   
         q = (L_x - x_t)**2 + (L_y - y_t)**2
         if H_t.size == 0:
-            H_t = np.matrix([[-L_x-x_t/np.sqrt(q),-L_y-y_t/np.sqrt(q),0],[L_y-y_t/q,-L_x-x_t/q,-1]])
+            H_t = np.matrix([[-(L_x-x_t)/np.sqrt(q),-(L_y-y_t)/np.sqrt(q),0],[(L_y-y_t)/q,-(L_x-x_t)/q,-1]])
             Q_t_array = np.array([sigma_l_d**2,sigma_l_theta**2])
             zsensor_t = np.matrix([[z_range],[z_bearing]])
             zreal_t = np.matrix([[Z_range],[Z_bearing]])
         
         else: 
-            H_t = np.vstack((H_t, np.matrix([[-L_x-x_t/np.sqrt(q),-L_y-y_t/np.sqrt(q),0],[L_y-y_t/q,-L_x-x_t/q,-1]])))
+            H_t = np.vstack((H_t, np.matrix([[-(L_x-x_t)/np.sqrt(q),-(L_y-y_t)/np.sqrt(q),0],[(L_y-y_t)/q,-(L_x-x_t)/q,-1]])))
             Q_t_array = np.hstack((Q_t_array,np.array([sigma_l_d**2,sigma_l_theta**2])))
             zsensor_t = np.vstack((zsensor_t,np.matrix([[z_range],[z_bearing]])))
             zreal_t = np.vstack((zreal_t,np.matrix([[Z_range],[Z_bearing]])))
@@ -147,41 +143,56 @@ while(True):
     row, col = np.diag_indices(Q_t_array.shape[0])
     Q_t[row,col] = Q_t_array
 
-    K_t = np.dot(np.dot(sigma_t,H_t.T),np.linalg.inv(np.dot(np.dot(H_t,sigma_t),H_t.T)+Q_t))
+    K_t = np.dot(np.dot(sigma_t_,H_t.T),np.linalg.inv(np.dot(np.dot(H_t,sigma_t_),H_t.T)+Q_t))
     INOVA = zsensor_t - zreal_t
 
     DeltaP = np.dot(K_t,INOVA)
+
+    PoseR = getPose()
+
+    x_t_no_filter = PoseR['x']
+    y_t_no_filter = PoseR['y']
+    th_t_no_filter = PoseR['th'] 
+
     
     postPose(DeltaP.tolist())
+    
+    sigma_t = np.dot(np.eye(3) - np.dot(K_t,H_t),sigma_t_)
 
-    sigma_t = np.eye(3) - np.dot(np.dot(K_t,H_t),sigma_t)
+    print(np.linalg.det(sigma_t))
 
-    sigma_x = np.sqrt(sigma_t[0,0])
-    sigma_y = np.sqrt(sigma_t[1,1])
+    #Ellipse de erro
+    sigma_x = sigma_t[0,0]
+    sigma_y = sigma_t[1,1]
     sigma_xy = sigma_t[1,0]
     
-    a = np.sqrt(1/2*(sigma_x**2+sigma_y**2+np.sqrt((sigma_y**2-sigma_x**2)**2+4*sigma_xy**2)))
-    b = np.sqrt(1/2*(sigma_x**2+sigma_y**2-np.sqrt((sigma_y**2-sigma_x**2)**2+4*sigma_xy**2)))
-
-    beta = 1/2*(np.arctan(2*sigma_xy/(sigma_y**2-sigma_x**2)))
+    a = np.sqrt(1/2*(sigma_x+sigma_y+np.sqrt((sigma_y-sigma_x)**2+4*sigma_xy**2)))
+    b = np.sqrt(1/2*(sigma_x+sigma_y-np.sqrt((sigma_y-sigma_x)**2+4*sigma_xy**2)))
+    beta = 1/2*(np.arctan(2*sigma_xy/(sigma_y-sigma_x)))
 
     beta = normAngle(beta)
    
     PoseR = getPose()
 
-    x_odometry = PoseR['x']
-    y_odometry = PoseR['y']
-    th_odometry = PoseR['th'] 
+    x_t = PoseR['x']
+    y_t = PoseR['y']
+    th_t = PoseR['th'] 
 
-    X,Y = calculateEllipse(x_odometry,y_odometry,b,a,beta)
+    X,Y = calculateEllipse(x_t,y_t,b,a,beta)
 
-    ax.quiver(x_odometry,y_odometry,np.cos(th_odometry),np.sin(th_odometry),width=0.0005)
-    ax.scatter(x_odometry,y_odometry,color='r')
+
+    ax.quiver(x_t_no_filter,y_t_no_filter,np.cos(th_t_no_filter),np.sin(th_t_no_filter),width=0.0005)
+    ax.scatter(x_t_no_filter,y_t_no_filter,color='r')
+
+    ax.quiver(x_t,y_t,np.cos(th_t),np.sin(th_t),width=0.0005)
+    ax.scatter(x_t,y_t,color='b')
     
     ax.plot(X,Y)
-
-    plt.pause(timespan)
+    plt.pause(0.001)
     plt.draw()
 
+    sigma_t_old = sigma_t
+    theta_t_old = theta_t
+    
 
 

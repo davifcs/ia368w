@@ -138,8 +138,8 @@ def SplitAndMerge(global_poses):
     Points = np.array([PointsX, PointsY, NPoints])
 
     # Plotagem das retas (opcional)
-    # plt.plot(PointsX, PointsY)
-    # plt.show()
+    plt.plot(PointsX, PointsY)
+    plt.show()
 
     # retorna pontos encontrados
     return Points
