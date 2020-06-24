@@ -103,10 +103,10 @@ def http_post(resource, payload):
 		rbytes = resp.read()
 		retdata = rbytes.decode('ASCII')
 		ctype = resp.getheader('Content-Type')
-		if ctype.startswith('application/json'):
-			retdata = json.loads(retdata)
-			if(key != ''):
-				retdata = retdata[key]
+		# if ctype.startswith('application/json'):
+		# 	retdata = json.loads(retdata)
+		# 	if(key != ''):
+		# 		retdata = retdata[key]
 	elif resp.status == 201:   # Created
 		retdata = resp.getheader('Location')
 	conn.close()

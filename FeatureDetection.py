@@ -57,49 +57,46 @@ epsRange = 100
 
 epsBearing = 4*np.pi/180
 
-L_x = [0,  0,   920,  920,  4190,  4680, 4190,  4030, 4680]
-L_y = [0,  2280, 2280, 3200, 2365,  2365, 3200,  0,    650]
-
-L = np.array([L_x,L_y])
-
 # ---------------------------------------
 
 # Passo 1 - Split and Merge
 
-def FeatureDetection(global_poses, Pose):
-  Points = SplitAndMerge(global_poses)
+def FeatureDetection(global_poses, L, Pose):
+  PointsX, PointsY, NPoints = SplitAndMerge(global_poses)
 
-  if (len(Points) < 3):   # unica reta ?
+  L_x = L[0].tolist()
+  L_y = L[1].tolist()
+
+  if (len(NPoints) < 3):   # unica reta ?
     print("Nenhuma feature detectada\n")
     return
 
   # Passo 2 - Calculo da MAXIMA VEROSSIMILHANCA
 
+  Z_range = []
+  Z_bearing = []
   # As features dos landmarks verdadeiros relativas a posicao atual:
-
-  Z_range   = np.sqrt((L[0] - Pose['x'])**2 + (L[1] -  Pose['y'])**2) # [mm]
-  Z_bearing = np.arctan2(L[1] - Pose['y'] , L[0] - Pose['x']) - Pose['th'] # [rad]
+  for x, y in zip(L_x, L_y):
+    Z_range.append(np.sqrt((x - Pose['x'])**2 + (y -  Pose['y'])**2)) # [mm]
+    Z_bearing.append(np.arctan2(y- Pose['y'] , x - Pose['x']) - Pose['th']) # [rad]
 
   # Landmarks detectados no momento atual pelo sensor (com erro)
-
-  points_len = len(Points[0])
 
   l_x = []
   l_y = []
 
-  for i in range(0,points_len,2):
-    if Points[2][i] > 2:    # despreza retas comapenas 2 pontos
-      l_x.append(Points[0][i])
-      l_y.append(Points[1][i])
+  for x, y, n in zip(PointsX,PointsY,NPoints):
+    if n > 2:    # despreza retas comapenas 2 pontos
+      l_x.append(x)
+      l_y.append(y)
 
-  l_x = np.asarray(l_x)
-  l_y = np.asarray(l_y)
+  z_range = []
+  z_bearing = []
 
   # Features atuais
-
-  z_range = np.sqrt((l_x - Pose['x'])**2 + (l_y - Pose['y'])**2) # [mm]
-
-  z_bearing = np.arctan2(l_y - Pose['y'], l_x - Pose['x']) - Pose['th'] # [rad]
+  for x, y in zip(l_x,l_y):
+    z_range.append(np.sqrt((x - Pose['x'])**2 + (y - Pose['y'])**2)) # [mm]
+    z_bearing.append(np.arctan2(y - Pose['y'], x - Pose['x']) - Pose['th']) # [rad]
 
   detected_x = []
   detected_y = []
@@ -126,9 +123,9 @@ def FeatureDetection(global_poses, Pose):
           Z_range_array.append(Z_range[j])
           Z_bearing_array.append(Z_bearing[j])
 
-  plt.scatter(L_x , L_y,color='red')
+  plt.scatter(real_x , real_y,color='red')
   plt.scatter(detected_x,detected_y,color='green')
-  plt.scatter(l_x , l_y,color='blue')
+  plt.scatter(detected_x , detected_y,color='blue')
   plt.show()
 
   return detected_x, detected_y, real_x, real_y, deltaBearing_array, z_range_array, z_bearing_array, Z_range_array, Z_bearing_array

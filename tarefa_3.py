@@ -22,7 +22,6 @@ L_y = [0,  2280, 2280, 3200, 2365,  2365, 3200,  0,    650]
 
 L = np.array([L_x,L_y])
 
-
 def calculateEllipse(x,y,a,b,angle,steps=36):
     beta = -angle*np.pi/180
     sinbeta = np.sin(beta)
@@ -68,8 +67,9 @@ def getGlobalPose():
     return res
 
 def postPose(delta_pose):
-    pose = '/motion/pose'
-    res,_ = restthru.http_post(host+pose,delta_pose)
+    pose = "/motion/pose"
+    restthru.http_post(host+pose,delta_pose)
+
 
 
 PoseR = getPose()
@@ -81,8 +81,8 @@ R = np.matrix([[R_sigma_x,0,0],[0,R_sigma_y,0],[0,0,R_sigma_th]])
 
 plt.ion()
 fig, ax = plt.subplots()
-plt.xlim(-2000,5000)
-plt.ylim(-2000,5000)
+plt.xlim(-1000,5000)
+plt.ylim(-1000,4000)
 
 while(True):    
     #Prediction step
@@ -118,9 +118,9 @@ while(True):
     y_t = PoseR['y']
     theta_t = PoseR['th']
 
-    detected_x, detected_y, real_x, real_y, deltaBearing_array, z_range_array, z_bearing_array, Z_range_array, Z_bearing_array = FeatureDetection(global_poses, PoseR)
+    detected_x, detected_y, real_x, real_y, deltaBearing_array, z_range_array, z_bearing_array, Z_range_array, Z_bearing_array = FeatureDetection(global_poses, L, PoseR)
     
-    if  not detected_x:
+    if not detected_x:
         continue
 
     H_t = np.array([])
@@ -150,12 +150,17 @@ while(True):
 
     PoseR = getPose()
 
+    DeltaP = {
+    "th": DeltaP[2].item(),
+    "x": DeltaP[0].item(),
+    "y": DeltaP[1].item()
+    }
+    
     x_t_no_filter = PoseR['x']
     y_t_no_filter = PoseR['y']
     th_t_no_filter = PoseR['th'] 
 
-    
-    postPose(DeltaP.tolist())
+    postPose(DeltaP)
     
     sigma_t = np.dot(np.eye(3) - np.dot(K_t,H_t),sigma_t_)
 
@@ -181,16 +186,16 @@ while(True):
     X,Y = calculateEllipse(x_t,y_t,b,a,beta)
 
 
-    ax.quiver(x_t_no_filter,y_t_no_filter,np.cos(th_t_no_filter),np.sin(th_t_no_filter),width=0.0005)
+    ax.quiver(x_t_no_filter,y_t_no_filter,np.cos(th_t_no_filter),np.sin(th_t_no_filter),width=0.00005)
     ax.scatter(x_t_no_filter,y_t_no_filter,color='r')
 
-    ax.quiver(x_t,y_t,np.cos(th_t),np.sin(th_t),width=0.0005)
+    ax.quiver(x_t,y_t,np.cos(th_t),np.sin(th_t),width=0.00005)
     ax.scatter(x_t,y_t,color='b')
-    
-    ax.plot(X,Y)
-    plt.pause(0.001)
-    plt.draw()
 
+    ax.plot(X,Y)
+    plt.pause(0.0001)
+    plt.draw()
+   
     sigma_t_old = sigma_t
     theta_t_old = theta_t
     
