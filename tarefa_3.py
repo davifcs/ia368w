@@ -1,6 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import time
+from datetime import datetime
 import restthru
 from FeatureDetection import FeatureDetection
 
@@ -84,7 +85,8 @@ fig, ax = plt.subplots()
 plt.xlim(-1000,5000)
 plt.ylim(-1000,4000)
 
-while(True):    
+while(True):
+    pre_filter = datetime.now().timestamp()    
     #Prediction step
     l_vel,r_vel = getVel()
 
@@ -109,8 +111,11 @@ while(True):
 
     sigma_t_ = np.dot(np.dot(G_t,sigma_t_old),G_t.T) + np.dot(np.dot(V_t,sigma_delta_t),V_t.T) + R
         
+    after_filter = datetime.now().timestamp()
+
+    diff = after_filter - pre_filter
     # Update step
-    time.sleep(timespan)
+    time.sleep(timespan - diff)
 
     global_poses = getGlobalPose()
     PoseR = getPose()
@@ -160,31 +165,20 @@ while(True):
     y_t_no_filter = PoseR['y']
     th_t_no_filter = PoseR['th'] 
 
+    if abs(delta_s_l - delta_s_r) > 0:
+        continue 
+    
     postPose(DeltaP)
     
     sigma_t = np.dot(np.eye(3) - np.dot(K_t,H_t),sigma_t_)
 
     print(np.linalg.det(sigma_t))
-
-    #Ellipse de erro
-    sigma_x = sigma_t[0,0]
-    sigma_y = sigma_t[1,1]
-    sigma_xy = sigma_t[1,0]
     
-    a = np.sqrt(1/2*(sigma_x+sigma_y+np.sqrt((sigma_y-sigma_x)**2+4*sigma_xy**2)))
-    b = np.sqrt(1/2*(sigma_x+sigma_y-np.sqrt((sigma_y-sigma_x)**2+4*sigma_xy**2)))
-    beta = 1/2*(np.arctan(2*sigma_xy/(sigma_y-sigma_x)))
-
-    beta = normAngle(beta)
-   
     PoseR = getPose()
 
     x_t = PoseR['x']
     y_t = PoseR['y']
     th_t = PoseR['th'] 
-
-    X,Y = calculateEllipse(x_t,y_t,b,a,beta)
-
 
     ax.quiver(x_t_no_filter,y_t_no_filter,np.cos(th_t_no_filter),np.sin(th_t_no_filter),width=0.00005)
     ax.scatter(x_t_no_filter,y_t_no_filter,color='r')
@@ -192,7 +186,6 @@ while(True):
     ax.quiver(x_t,y_t,np.cos(th_t),np.sin(th_t),width=0.00005)
     ax.scatter(x_t,y_t,color='b')
 
-    ax.plot(X,Y)
     plt.pause(0.0001)
     plt.draw()
    
