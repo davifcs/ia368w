@@ -16,7 +16,7 @@ R_sigma_th = 3*np.pi/180
 sigma_l_d = 0.5
 sigma_l_theta = 0.1 * np.pi/180
 
-timespan = 0.5
+timespan = 1
 
 L_x = [0,  0,   920,  920,  4190,  4680, 4190,  4030, 4680]
 L_y = [0,  2280, 2280, 3200, 2365,  2365, 3200,  0,    650]
@@ -82,7 +82,7 @@ R = np.matrix([[R_sigma_x,0,0],[0,R_sigma_y,0],[0,0,R_sigma_th]])
 
 plt.ion()
 fig, ax = plt.subplots()
-plt.xlim(-1000,5000)
+plt.xlim(-1000,5500)
 plt.ylim(-1000,4000)
 
 while(True):
@@ -165,15 +165,12 @@ while(True):
     y_t_no_filter = PoseR['y']
     th_t_no_filter = PoseR['th'] 
 
-    if abs(delta_s_l - delta_s_r) > 0:
-        continue 
-    
-    postPose(DeltaP)
-    
-    sigma_t = np.dot(np.eye(3) - np.dot(K_t,H_t),sigma_t_)
-
-    print(np.linalg.det(sigma_t))
-    
+    if abs(delta_theta_t) < 0.01 and len(detected_x) > 1:
+        postPose(DeltaP)           
+        sigma_t = np.dot(np.eye(3) - np.dot(K_t,H_t),sigma_t_)
+        sigma_t_old = sigma_t
+        theta_t_old = theta_t
+        
     PoseR = getPose()
 
     x_t = PoseR['x']
@@ -188,9 +185,8 @@ while(True):
 
     plt.pause(0.0001)
     plt.draw()
-   
-    sigma_t_old = sigma_t
-    theta_t_old = theta_t
+
+
     
 
 
