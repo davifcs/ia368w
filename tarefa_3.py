@@ -8,11 +8,12 @@ from FeatureDetection import FeatureDetection
 host = 'http://127.0.0.1:4950'
 restthru.http_init()
 
+heuristic = True
 Ks = 0.05
 b_axis = 165
-R_sigma_x = 5
-R_sigma_y = 5
-R_sigma_th = 3*np.pi/180
+R_sigma_x = 0.5
+R_sigma_y = 0.5
+R_sigma_th = 0.3*np.pi/180
 sigma_l_d = 0.5
 sigma_l_theta = 0.1 * np.pi/180
 
@@ -84,8 +85,9 @@ plt.ion()
 fig, ax = plt.subplots()
 plt.xlim(-1000,5500)
 plt.ylim(-1000,4000)
+count = 0
 
-while(True):
+while(count < 60):
     pre_filter = datetime.now().timestamp()    
     #Prediction step
     l_vel,r_vel = getVel()
@@ -114,6 +116,7 @@ while(True):
     after_filter = datetime.now().timestamp()
 
     diff = after_filter - pre_filter
+    
     # Update step
     time.sleep(timespan - diff)
 
@@ -165,11 +168,20 @@ while(True):
     y_t_no_filter = PoseR['y']
     th_t_no_filter = PoseR['th'] 
 
-    if abs(delta_theta_t) < 0.01 and len(detected_x) > 1:
-        postPose(DeltaP)           
+    if heuristic:
+        mode = "heuristic"           
+        if abs(delta_theta_t) < 0.01 and len(detected_x) > 1: 
+            postPose(DeltaP)
+            sigma_t = np.dot(np.eye(3) - np.dot(K_t,H_t),sigma_t_)
+            sigma_t_old = sigma_t
+            theta_t_old = theta_t
+    else:
+        mode = "no-heuristic"
+        postPose(DeltaP)
         sigma_t = np.dot(np.eye(3) - np.dot(K_t,H_t),sigma_t_)
         sigma_t_old = sigma_t
-        theta_t_old = theta_t
+        theta_t_old = theta_t        
+
         
     PoseR = getPose()
 
@@ -185,6 +197,9 @@ while(True):
 
     plt.pause(0.0001)
     plt.draw()
+
+    count += 1
+fig.savefig(mode + ".png") 
 
 
     
