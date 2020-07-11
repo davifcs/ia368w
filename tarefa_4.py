@@ -16,6 +16,10 @@ R_sigma_y = 0.5
 R_sigma_th = 0.3*np.pi/180
 sigma_l_d = 0.5
 sigma_l_theta = 0.1 * np.pi/180
+range_min = -90
+range_max = 90
+range_step = 1
+laser_range = [range_min,range_max,range_step]
 
 timespan = 1
 
@@ -63,7 +67,7 @@ def getVel():
     return res["left"], res["right"]
     
 def getDistances():
-    distances = "/perception/laser/1/distances"
+    distances = "/perception/laser/1/distances?range="+range_min+":"+range_max+":"+range_step+""
     res,_ = restthru.http_get(host+distances)
 
     return res
@@ -72,20 +76,19 @@ def postPose(delta_pose):
     pose = "/motion/pose"
     restthru.http_post(host+pose,delta_pose)
 
-
-
 PoseR = getPose()
 theta_t_old = PoseR['th']
 sigma_t_old = np.zeros([3,3])
 
 R = np.matrix([[R_sigma_x,0,0],[0,R_sigma_y,0],[0,0,R_sigma_th]])
 
-
 plt.ion()
 fig, ax = plt.subplots()
 plt.xlim(-1000,5500)
 plt.ylim(-1000,4000)
 count = 0
+
+state_vector = np.array([])
 
 while(count < 60):
     pre_filter = datetime.now().timestamp()    
@@ -122,84 +125,58 @@ while(count < 60):
 
     Distances = getDistances()
     PoseR = getPose()
-    x_t = PoseR['x']
-    y_t = PoseR['y']
-    theta_t = PoseR['th']
+    X_t = PoseR['x']
+    X_t = np.vstack((X_t,PoseR['y']))
+    X_t = np.vstack((X_t,PoseR['theta']))
 
-    detected_x, detected_y, real_x, real_y, deltaBearing_array, z_range_array, z_bearing_array, Z_range_array, Z_bearing_array = FeatureDetection(Distances, L, PoseR)
+    Features = FeatureDetection(Distances,laser_range)
     
-    if not detected_x:
+    n_features = len(Features)
+
+    if not Features:
         continue
 
-    H_t = np.array([])
-        
-    for (l_x, l_y, L_x, L_y, z_range, z_bearing, Z_range, Z_bearing) in zip(detected_x, detected_y, real_x, real_y, z_range_array, z_bearing_array, Z_range_array, Z_bearing_array):   
-        q = (L_x - x_t)**2 + (L_y - y_t)**2
-        if H_t.size == 0:
-            H_t = np.matrix([[-(L_x-x_t)/np.sqrt(q),-(L_y-y_t)/np.sqrt(q),0],[(L_y-y_t)/q,-(L_x-x_t)/q,-1]])
-            Q_t_array = np.array([sigma_l_d**2,sigma_l_theta**2])
-            zsensor_t = np.matrix([[z_range],[z_bearing]])
-            zreal_t = np.matrix([[Z_range],[Z_bearing]])
-        
-        else: 
-            H_t = np.vstack((H_t, np.matrix([[-(L_x-x_t)/np.sqrt(q),-(L_y-y_t)/np.sqrt(q),0],[(L_y-y_t)/q,-(L_x-x_t)/q,-1]])))
-            Q_t_array = np.hstack((Q_t_array,np.array([sigma_l_d**2,sigma_l_theta**2])))
-            zsensor_t = np.vstack((zsensor_t,np.matrix([[z_range],[z_bearing]])))
-            zreal_t = np.vstack((zreal_t,np.matrix([[Z_range],[Z_bearing]])))
+    for r,b in Features:
+        M_x = PoseR['x'] + r * np.cos(b + PoseR['th'])
+        M_y = PoseR['y'] + r + np.sin(b + PoseR['th'])
+        M = np.vstack(M_x, M_y)
+        if state_vector == 0:
+            state_vector = M
+        else:
+            state_vector = np.vstack(state_vector,M)
 
-    Q_t = np.eye(Q_t_array.size)
-    row, col = np.diag_indices(Q_t_array.shape[0])
-    Q_t[row,col] = Q_t_array
+        H_t = np.array([])
 
-    K_t = np.dot(np.dot(sigma_t_,H_t.T),np.linalg.inv(np.dot(np.dot(H_t,sigma_t_),H_t.T)+Q_t))
-    INOVA = zsensor_t - zreal_t
+        delta = M - state_vector[:2]    
+        delta_x = delta[0][0]
+        delta_y = delta[1][0]
 
-    DeltaP = np.dot(K_t,INOVA)
+        q = np.dot(delta.T,delta)
 
-    PoseR = getPose()
+        F = np.matrix([5,n_features])
+        F[0][0] = 1
+        F[1][1] = 1
+        F[2][2] = 1
+        F[k][3] = 1
+        F[k+1][4] = 1
 
-    DeltaP = {
-    "th": DeltaP[2].item(),
-    "x": DeltaP[0].item(),
-    "y": DeltaP[1].item()
-    }
-    
-    x_t_no_filter = PoseR['x']
-    y_t_no_filter = PoseR['y']
-    th_t_no_filter = PoseR['th'] 
+        H_t = np.matrix([[-np.sqrt(q)*delta_x,-np.sqrt(q)*delta_y,0,np.sqrt(q)*delta_x,np.sqrt(q)*delta_y],[delta_y,-delta_x,-q,-delta_y,delta_x]])
+        H_t = np.dot(H_t,F)
+        Q_t = np.matrix([[0,sigma_l_d**2],[sigma_l_theta**2,0]])
 
-    if heuristic:
-        mode = "heuristic"           
-        if abs(delta_theta_t) < 0.01 and len(detected_x) > 1: 
-            postPose(DeltaP)
-            sigma_t = np.dot(np.eye(3) - np.dot(K_t,H_t),sigma_t_)
-            sigma_t_old = sigma_t
-            theta_t_old = theta_t
-    else:
-        mode = "no-heuristic"
-        postPose(DeltaP)
-        sigma_t = np.dot(np.eye(3) - np.dot(K_t,H_t),sigma_t_)
-        sigma_t_old = sigma_t
-        theta_t_old = theta_t        
+        zsensor_t = np.matrix([[np.sqrt(q)],[np.arctan2(delta_y,delta_x)-X_t[0][2]]])
+        zreal_t = np.matrix([[r],[b]])
 
-        
-    PoseR = getPose()
+        K_t = np.dot(np.dot(sigma_t_,H_t.T),np.linalg.inv(np.dot(np.dot(H_t,sigma_t_),H_t.T)+Q_t))
+        INOVA = zsensor_t - zreal_t
 
-    x_t = PoseR['x']
-    y_t = PoseR['y']
-    th_t = PoseR['th'] 
-
-    ax.quiver(x_t_no_filter,y_t_no_filter,np.cos(th_t_no_filter),np.sin(th_t_no_filter),width=0.00005)
-    ax.scatter(x_t_no_filter,y_t_no_filter,color='r')
-
-    ax.quiver(x_t,y_t,np.cos(th_t),np.sin(th_t),width=0.00005)
-    ax.scatter(x_t,y_t,color='b')
+        DeltaP = np.dot(K_t,INOVA)
 
     plt.pause(0.0001)
     plt.draw()
 
     count += 1
-fig.savefig(mode + ".png") 
+fig.savefig("EKFSlam.png") 
 
 
     

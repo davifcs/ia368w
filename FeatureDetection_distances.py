@@ -64,7 +64,7 @@ def FeatureDetection(distances, laser_range):
 
   # Landmarks detectados no momento atual pelo sensor (com erro)
   Features = []
-
+  range_bearing = []
   for x, y, n in zip(PointsX,PointsY,NPoints):
     if n < 3:    # despreza retas comapenas 2 pontos
       continue
@@ -74,9 +74,13 @@ def FeatureDetection(distances, laser_range):
       b = b - 2 * np.pi
     elif  b < -np.pi:
       b = 2*np.pi + b
-    
-  Features.append(r)
-  Features.append(b)
+    range_bearing.append(r)
+    range_bearing.append(b)
+    if not Features:
+      Features = range_bearing
+    else:
+      Features = np.vstack((Features,range_bearing))
+    range_bearing = []
 
   return Features
   
