@@ -76,22 +76,28 @@ def FeatureDetection(distances, laser_range):
       b = 2*np.pi + b
     range_bearing.append(r)
     range_bearing.append(b)
-    if not Features:
+    if len(Features) == 0:
       Features = range_bearing
     else:
       Features = np.vstack((Features,range_bearing))
     range_bearing = []
 
-  return Features
+  return Features[1:]
   
 # import restthru
 
 # host = 'http://127.0.0.1:4950'
 # restthru.http_init()
-# global_poses_request = "/perception/laser/1/global_poses"
-# global_poses,_ = restthru.http_get(host+global_poses_request)
+# distances_request = "/perception/laser/1/distances?range=-90:90:1"
+# distances,_ = restthru.http_get(host+distances_request)
 
+# laser_range = np.array([-90,90,1])
 # pose_request = "/motion/pose"
 # pose, _ = restthru.http_get(host+pose_request)
 
-# print(FeatureDetection(global_poses,pose))
+# Features = FeatureDetection(distances,laser_range)
+# print(Features)
+# fig, ax = plt.subplots()
+# print(Features[:,0],Features[:,1])
+# ax.scatter(Features[:,0],Features[:,1])
+# plt.show()

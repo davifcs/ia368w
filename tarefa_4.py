@@ -20,7 +20,7 @@ range_min = -90
 range_max = 90
 range_step = 1
 laser_range = [range_min,range_max,range_step]
-mark_threshold = 300
+mark_threshold = 30
 
 timespan = 1
 
@@ -68,7 +68,7 @@ def getVel():
     return res["left"], res["right"]
     
 def getDistances():
-    distances = "/perception/laser/1/distances?range="+range_min+":"+range_max+":"+range_step+""
+    distances = "/perception/laser/1/distances?range="+str(range_min)+":"+str(range_max)+":"+str(range_step)+""
     res,_ = restthru.http_get(host+distances)
 
     return res
@@ -127,31 +127,35 @@ while(count < 60):
     Distances = getDistances()
     PoseR = getPose()
     X_t[0] = PoseR['x']
-    X_t[1] = np.append(X_t,PoseR['y'])
-    X_t[2] = np.append(X_t,PoseR['theta'])
-
+    X_t[1] = PoseR['y']
+    X_t[2] = PoseR['th']
+    print(X_t)
     Features = FeatureDetection(Distances,laser_range)
     
     n_features = len(Features)
 
-    if not Features:
+    if n_features == 0:
         continue
-
+    
     for r,b in Features:
+        k = None
         M_x = PoseR['x'] + r * np.cos(b + PoseR['th'])
         M_y = PoseR['y'] + r + np.sin(b + PoseR['th'])
+        print(M_x, M_y)
         if X_t.size < 4:
-            X_t = np.append(X_t,M_x,M_y)
+                X_t = np.append(X_t,[M_x,M_y])
         else:
             M_x_dist = abs(X_t[3::2] - M_x)
             M_y_dist = abs(X_t[4::2] - M_y)
-            for x, y in M_x_dist, M_y_dist:
+            for x, y in zip(M_x_dist, M_y_dist):
                 if x < mark_threshold and y < mark_threshold:
-                    k, = np.where(M_x_dist == x) + 3   
-                    continue                
-                X_t = np.append(X_t,M_x,M_y)
-                continue
-
+                    k, = np.where(M_x_dist == x)
+                    k = k[0] + 3  
+        if k is None:
+            X_t = np.append(X_t,[M_x,M_y])
+            continue
+    
+        print(k)
         H_t = np.array([])
 
         delta_x = M_x - X_t[0]    
@@ -160,7 +164,7 @@ while(count < 60):
 
         q = np.dot(delta.T,delta)
 
-        F = np.matrix([5,n_features])
+        F = np.zeros((5,n_features))
         F[0][0] = 1
         F[1][1] = 1
         F[2][2] = 1
@@ -185,7 +189,7 @@ while(count < 60):
     PoseR = np.array([PoseR['x'], PoseR['y'], PoseR['th']])
     PoseK = np.array([X_t[0], X_t[1], X_t[2]])
     DeltaP = PoseK - PoseR
-    DeltaP[3] = normAngle(DeltaP[2])
+    DeltaP[2] = normAngle(DeltaP[2])
 
     DeltaP = {
     "th": DeltaP[2].item(),
