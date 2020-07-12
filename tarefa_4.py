@@ -20,6 +20,7 @@ range_min = -90
 range_max = 90
 range_step = 1
 laser_range = [range_min,range_max,range_step]
+mark_threshold = 300
 
 timespan = 1
 
@@ -88,7 +89,7 @@ plt.xlim(-1000,5500)
 plt.ylim(-1000,4000)
 count = 0
 
-state_vector = np.array([])
+X_t = np.empty([3])
 
 while(count < 60):
     pre_filter = datetime.now().timestamp()    
@@ -125,9 +126,9 @@ while(count < 60):
 
     Distances = getDistances()
     PoseR = getPose()
-    X_t = PoseR['x']
-    X_t = np.vstack((X_t,PoseR['y']))
-    X_t = np.vstack((X_t,PoseR['theta']))
+    X_t[0] = PoseR['x']
+    X_t[1] = np.append(X_t,PoseR['y'])
+    X_t[2] = np.append(X_t,PoseR['theta'])
 
     Features = FeatureDetection(Distances,laser_range)
     
@@ -139,17 +140,23 @@ while(count < 60):
     for r,b in Features:
         M_x = PoseR['x'] + r * np.cos(b + PoseR['th'])
         M_y = PoseR['y'] + r + np.sin(b + PoseR['th'])
-        M = np.vstack(M_x, M_y)
-        if state_vector == 0:
-            state_vector = M
+        if X_t.size < 4:
+            X_t = np.append(X_t,M_x,M_y)
         else:
-            state_vector = np.vstack(state_vector,M)
+            M_x_dist = abs(X_t[3::2] - M_x)
+            M_y_dist = abs(X_t[4::2] - M_y)
+            for x, y in M_x_dist, M_y_dist:
+                if x < mark_threshold and y < mark_threshold:
+                    k, = np.where(M_x_dist == x) + 3   
+                    continue                
+                X_t = np.append(X_t,M_x,M_y)
+                continue
 
         H_t = np.array([])
 
-        delta = M - state_vector[:2]    
-        delta_x = delta[0][0]
-        delta_y = delta[1][0]
+        delta_x = M_x - X_t[0]    
+        delta_y = M_y - X_t[1]
+        delta = np.append(delta_x,delta_y)
 
         q = np.dot(delta.T,delta)
 
@@ -164,13 +171,31 @@ while(count < 60):
         H_t = np.dot(H_t,F)
         Q_t = np.matrix([[0,sigma_l_d**2],[sigma_l_theta**2,0]])
 
-        zsensor_t = np.matrix([[np.sqrt(q)],[np.arctan2(delta_y,delta_x)-X_t[0][2]]])
+        zsensor_t = np.matrix([[np.sqrt(q)],[np.arctan2(delta_y,delta_x)-X_t[2]]])
         zreal_t = np.matrix([[r],[b]])
 
         K_t = np.dot(np.dot(sigma_t_,H_t.T),np.linalg.inv(np.dot(np.dot(H_t,sigma_t_),H_t.T)+Q_t))
         INOVA = zsensor_t - zreal_t
 
-        DeltaP = np.dot(K_t,INOVA)
+        X_t = X_t.T + np.dot(K_t,INOVA)
+        X_t = X_t.T
+        
+        sigma_t_ = np.dot(np.eye(3) - np.dot(K_t,H_t),sigma_t_)
+    
+    PoseR = np.array([PoseR['x'], PoseR['y'], PoseR['th']])
+    PoseK = np.array([X_t[0], X_t[1], X_t[2]])
+    DeltaP = PoseK - PoseR
+    DeltaP[3] = normAngle(DeltaP[2])
+
+    DeltaP = {
+    "th": DeltaP[2].item(),
+    "x": DeltaP[0].item(),
+    "y": DeltaP[1].item()
+    }
+    
+    postPose(DeltaP)
+    
+    sigma_t_old = sigma_t_
 
     plt.pause(0.0001)
     plt.draw()
