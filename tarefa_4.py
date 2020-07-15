@@ -24,11 +24,6 @@ mark_threshold = 30
 
 timespan = 1
 
-L_x = [0,  0,   920,  920,  4190,  4680, 4190,  4030, 4680]
-L_y = [0,  2280, 2280, 3200, 2365,  2365, 3200,  0,    650]
-
-L = np.array([L_x,L_y])
-
 def calculateEllipse(x,y,a,b,angle,steps=36):
     beta = -angle*np.pi/180
     sinbeta = np.sin(beta)
@@ -114,8 +109,15 @@ while(count < 60):
     V_t = np.matrix([[a,b],[c,d],[1/(2*b_axis),-1/(2*b_axis)]])
 
     sigma_delta_t = np.matrix([[Ks * np.abs(delta_s_r),0],[0,Ks * np.abs(delta_s_l)]])
+    
+    G_t_offset = sigma_t_old.shape[0]-G_t.shape[0]
+    G_t = np.pad(G_t, ((0,G_t_offset), (0,G_t_offset)), mode='constant')
+    R = np.pad(R, ((0,G_t_offset), (0,G_t_offset)), mode='constant')
 
-    sigma_t_ = np.dot(np.dot(G_t,sigma_t_old),G_t.T) + np.dot(np.dot(V_t,sigma_delta_t),V_t.T) + R
+    for i in range (G_t_offset, sigma_t_old.shape[0]):
+        G_t[i][i] = 1
+
+    sigma_t_ = np.dot(np.dot(G_t,sigma_t_old),G_t.T)# + np.dot(np.dot(V_t,sigma_delta_t),V_t.T) + R
         
     after_filter = datetime.now().timestamp()
 
@@ -129,7 +131,6 @@ while(count < 60):
     X_t[0] = PoseR['x']
     X_t[1] = PoseR['y']
     X_t[2] = PoseR['th']
-    print(X_t)
     Features = FeatureDetection(Distances,laser_range)
     
     n_features = len(Features)
@@ -141,10 +142,7 @@ while(count < 60):
         k = None
         M_x = PoseR['x'] + r * np.cos(b + PoseR['th'])
         M_y = PoseR['y'] + r + np.sin(b + PoseR['th'])
-        print(M_x, M_y)
-        if X_t.size < 4:
-                X_t = np.append(X_t,[M_x,M_y])
-        else:
+        if X_t.size > 3:
             M_x_dist = abs(X_t[3::2] - M_x)
             M_y_dist = abs(X_t[4::2] - M_y)
             for x, y in zip(M_x_dist, M_y_dist):
@@ -152,10 +150,14 @@ while(count < 60):
                     k, = np.where(M_x_dist == x)
                     k = k[0] + 3  
         if k is None:
+            print(X_t)
             X_t = np.append(X_t,[M_x,M_y])
+            sigma_t_ = np.pad(sigma_t_, ((0,2), (0,2)), mode='constant')
+            sigma_len = sigma_t_.shape[0]
+            sigma_t_[sigma_len-1][sigma_len-1] = sigma_l_d
+            sigma_t_[sigma_len-2][sigma_len-2] = sigma_l_d
             continue
-    
-        print(k)
+
         H_t = np.array([])
 
         delta_x = M_x - X_t[0]    
@@ -164,7 +166,7 @@ while(count < 60):
 
         q = np.dot(delta.T,delta)
 
-        F = np.zeros((5,n_features))
+        F = np.zeros((5,X_t.shape[0]))
         F[0][0] = 1
         F[1][1] = 1
         F[2][2] = 1
@@ -182,9 +184,11 @@ while(count < 60):
         INOVA = zsensor_t - zreal_t
 
         X_t = X_t.T + np.dot(K_t,INOVA)
-        X_t = X_t.T
         
-        sigma_t_ = np.dot(np.eye(3) - np.dot(K_t,H_t),sigma_t_)
+        X_t = X_t[0]
+        
+        
+        sigma_t_ = np.dot(np.eye(sigma_t_.shape[0]) - np.dot(K_t,H_t),sigma_t_)
     
     PoseR = np.array([PoseR['x'], PoseR['y'], PoseR['th']])
     PoseK = np.array([X_t[0], X_t[1], X_t[2]])
