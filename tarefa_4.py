@@ -20,25 +20,9 @@ range_min = -90
 range_max = 90
 range_step = 1
 laser_range = [range_min,range_max,range_step]
-mark_threshold = 30
+mark_threshold = 300
 
 timespan = 1
-
-def calculateEllipse(x,y,a,b,angle,steps=36):
-    beta = -angle*np.pi/180
-    sinbeta = np.sin(beta)
-    cosbeta = np.cos(beta)
-    
-    alpha = np.linspace(0, 360, steps)
-    alpha = alpha * np.pi/180
-
-    sinalpha = np.sin(alpha)
-    cosalpha = np.cos(alpha)
-
-    X = x + (a * cosalpha * cosbeta - b * sinalpha * sinbeta)
-    Y = y + (a * cosalpha * sinbeta + b * sinalpha * cosbeta)
-
-    return X,Y
 
 def normAngle(angle):
     if angle > np.pi:
@@ -51,7 +35,6 @@ def normAngle(angle):
 def getPose():
     pose = "/motion/pose"
     res,_ = restthru.http_get(host+pose)
-    
     res['th'] = normAngle(res["th"]*np.pi/180)
 
     return res
@@ -81,10 +64,14 @@ R = np.matrix([[R_sigma_x,0,0],[0,R_sigma_y,0],[0,0,R_sigma_th]])
 plt.ion()
 fig, ax = plt.subplots()
 plt.xlim(-1000,5500)
-plt.ylim(-1000,4000)
+plt.ylim(-2500,4000)
 count = 0
 
 X_t = np.empty([3])
+F = np.zeros((5,3))
+F[0][0] = 1
+F[1][1] = 1
+F[2][2] = 1
 
 while(count < 60):
     pre_filter = datetime.now().timestamp()    
@@ -112,13 +99,16 @@ while(count < 60):
     
     G_t_offset = sigma_t_old.shape[0]-G_t.shape[0]
     G_t = np.pad(G_t, ((0,G_t_offset), (0,G_t_offset)), mode='constant')
-    R = np.pad(R, ((0,G_t_offset), (0,G_t_offset)), mode='constant')
+    R_offset = sigma_t_old.shape[0]-R.shape[0]
+    R = np.pad(R, ((0,R_offset), (0,R_offset)), mode='constant')
 
     for i in range (G_t_offset, sigma_t_old.shape[0]):
         G_t[i][i] = 1
+    for i in range (R_offset, sigma_t_old.shape[0]):   
+        R[i][i] = sigma_l_d
 
-    sigma_t_ = np.dot(np.dot(G_t,sigma_t_old),G_t.T)# + np.dot(np.dot(V_t,sigma_delta_t),V_t.T) + R
-        
+    sigma_t_ = np.dot(np.dot(G_t,sigma_t_old),G_t.T) + R
+
     after_filter = datetime.now().timestamp()
 
     diff = after_filter - pre_filter
@@ -141,23 +131,22 @@ while(count < 60):
     for r,b in Features:
         k = None
         M_x = PoseR['x'] + r * np.cos(b + PoseR['th'])
-        M_y = PoseR['y'] + r + np.sin(b + PoseR['th'])
+        M_y = PoseR['y'] + r * np.sin(b + PoseR['th'])
         if X_t.size > 3:
             M_x_dist = abs(X_t[3::2] - M_x)
             M_y_dist = abs(X_t[4::2] - M_y)
             for x, y in zip(M_x_dist, M_y_dist):
                 if x < mark_threshold and y < mark_threshold:
                     k, = np.where(M_x_dist == x)
-                    k = k[0] + 3  
+                    k = k[0]
         if k is None:
-            print(X_t)
             X_t = np.append(X_t,[M_x,M_y])
             sigma_t_ = np.pad(sigma_t_, ((0,2), (0,2)), mode='constant')
             sigma_len = sigma_t_.shape[0]
             sigma_t_[sigma_len-1][sigma_len-1] = sigma_l_d
             sigma_t_[sigma_len-2][sigma_len-2] = sigma_l_d
             continue
-
+        
         H_t = np.array([])
 
         delta_x = M_x - X_t[0]    
@@ -165,31 +154,26 @@ while(count < 60):
         delta = np.append(delta_x,delta_y)
 
         q = np.dot(delta.T,delta)
-
         F = np.zeros((5,X_t.shape[0]))
         F[0][0] = 1
         F[1][1] = 1
         F[2][2] = 1
-        F[k][3] = 1
-        F[k+1][4] = 1
-
+        F[3][k*2+3] = 1
+        F[4][k*2+4] = 1
         H_t = np.matrix([[-np.sqrt(q)*delta_x,-np.sqrt(q)*delta_y,0,np.sqrt(q)*delta_x,np.sqrt(q)*delta_y],[delta_y,-delta_x,-q,-delta_y,delta_x]])
         H_t = np.dot(H_t,F)
         Q_t = np.matrix([[0,sigma_l_d**2],[sigma_l_theta**2,0]])
 
         zsensor_t = np.matrix([[np.sqrt(q)],[np.arctan2(delta_y,delta_x)-X_t[2]]])
         zreal_t = np.matrix([[r],[b]])
-
         K_t = np.dot(np.dot(sigma_t_,H_t.T),np.linalg.inv(np.dot(np.dot(H_t,sigma_t_),H_t.T)+Q_t))
         INOVA = zsensor_t - zreal_t
 
         X_t = X_t.T + np.dot(K_t,INOVA)
         
-        X_t = X_t[0]
-        
-        
+        X_t = np.ravel( X_t[0][:] )
         sigma_t_ = np.dot(np.eye(sigma_t_.shape[0]) - np.dot(K_t,H_t),sigma_t_)
-    
+
     PoseR = np.array([PoseR['x'], PoseR['y'], PoseR['th']])
     PoseK = np.array([X_t[0], X_t[1], X_t[2]])
     DeltaP = PoseK - PoseR
@@ -201,10 +185,15 @@ while(count < 60):
     "y": DeltaP[1].item()
     }
     
+    print(DeltaP)
     postPose(DeltaP)
-    
     sigma_t_old = sigma_t_
 
+    PoseR = getPose()      
+
+    ax.scatter(X_t[3::2],X_t[4::2], color='r')
+    ax.quiver(PoseR['x'],PoseR['y'],np.cos(PoseR['th']),np.sin(PoseR['th']),width=0.0005)
+    
     plt.pause(0.0001)
     plt.draw()
 

@@ -140,8 +140,8 @@ def SplitAndMerge(distances, laser_range):
 
 
     # Plotagem das retas (opcional)
-    plt.plot(PointsX, PointsY)
-    plt.show()
+    # plt.plot(PointsX, PointsY)
+    # plt.show()
 
     # retorna pontos encontrados
     return PointsX, PointsY, NPoints
