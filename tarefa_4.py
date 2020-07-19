@@ -4,6 +4,8 @@ import time
 from datetime import datetime
 import restthru
 from FeatureDetection_distances import FeatureDetection
+from matplotlib.path import Path
+import matplotlib.patches as patches
 
 host = 'http://127.0.0.1:4950'
 restthru.http_init()
@@ -11,25 +13,26 @@ restthru.http_init()
 heuristic = True
 Ks = 0.05
 b_axis = 165
-R_sigma_x = 0.5
-R_sigma_y = 0.5
-R_sigma_th = 0.3*np.pi/180
-sigma_l_d = 0.5
+R_sigma_x = 5
+R_sigma_y = 5
+R_sigma_th = 0.5*np.pi/180
+sigma_l_d = 5
 sigma_l_theta = 0.1 * np.pi/180
 range_min = -90
 range_max = 90
 range_step = 1
 laser_range = [range_min,range_max,range_step]
 mark_threshold = 300
-
 timespan = 1
+L_x = [0,  0,   920,  920,  4190,  4190, 4680,  4680, 4030, 0]
+L_y = [0,  2280, 2280, 3200, 3200,  2365, 2365,  650,    0, 0]
 
 def normAngle(angle):
     if angle > np.pi:
         angle = angle-2*np.pi
     elif angle < - np.pi:
         angle = angle+2*np.pi
-    
+
     return angle
 
 def getPose():
@@ -58,13 +61,18 @@ def postPose(delta_pose):
 PoseR = getPose()
 theta_t_old = PoseR['th']
 sigma_t_old = np.zeros([3,3])
+verts = [[PoseR['x'], PoseR['y']]]
+codes = [Path.MOVETO]
 
 R = np.matrix([[R_sigma_x,0,0],[0,R_sigma_y,0],[0,0,R_sigma_th]])
 
 plt.ion()
 fig, ax = plt.subplots()
 plt.xlim(-1000,5500)
-plt.ylim(-2500,4000)
+plt.ylim(-1500,5000)
+plt.plot(L_x,L_y, color='k')
+ax.scatter(L_x,L_y, marker='x',color='b')
+
 count = 0
 
 X_t = np.empty([3])
@@ -73,7 +81,7 @@ F[0][0] = 1
 F[1][1] = 1
 F[2][2] = 1
 
-while(count < 60):
+while(count < 180):
     pre_filter = datetime.now().timestamp()    
     #Prediction step
     l_vel,r_vel = getVel()
@@ -99,6 +107,8 @@ while(count < 60):
     
     G_t_offset = sigma_t_old.shape[0]-G_t.shape[0]
     G_t = np.pad(G_t, ((0,G_t_offset), (0,G_t_offset)), mode='constant')
+    V_t_offset = sigma_t_old.shape[0]-V_t.shape[0]
+    V_t = np.pad(V_t, ((0,V_t_offset), (0,0)), mode='constant')
     R_offset = sigma_t_old.shape[0]-R.shape[0]
     R = np.pad(R, ((0,R_offset), (0,R_offset)), mode='constant')
 
@@ -107,7 +117,7 @@ while(count < 60):
     for i in range (R_offset, sigma_t_old.shape[0]):   
         R[i][i] = sigma_l_d
 
-    sigma_t_ = np.dot(np.dot(G_t,sigma_t_old),G_t.T) + R
+    sigma_t_ = np.dot(np.dot(G_t,sigma_t_old),G_t.T) + np.dot(np.dot(V_t,sigma_delta_t),V_t.T) + R
 
     after_filter = datetime.now().timestamp()
 
@@ -168,10 +178,9 @@ while(count < 60):
         zreal_t = np.matrix([[r],[b]])
         K_t = np.dot(np.dot(sigma_t_,H_t.T),np.linalg.inv(np.dot(np.dot(H_t,sigma_t_),H_t.T)+Q_t))
         INOVA = zsensor_t - zreal_t
-
         X_t = X_t.T + np.dot(K_t,INOVA)
-        
         X_t = np.ravel( X_t[0][:] )
+
         sigma_t_ = np.dot(np.eye(sigma_t_.shape[0]) - np.dot(K_t,H_t),sigma_t_)
 
     PoseR = np.array([PoseR['x'], PoseR['y'], PoseR['th']])
@@ -185,14 +194,18 @@ while(count < 60):
     "y": DeltaP[1].item()
     }
     
-    print(DeltaP)
+    print("Landmarks detectados: ", (X_t.shape[0]-3)/2)
     postPose(DeltaP)
     sigma_t_old = sigma_t_
 
     PoseR = getPose()      
-
-    ax.scatter(X_t[3::2],X_t[4::2], color='r')
-    ax.quiver(PoseR['x'],PoseR['y'],np.cos(PoseR['th']),np.sin(PoseR['th']),width=0.0005)
+    
+    verts.append([PoseR['x'], PoseR['y']])
+    codes.append(Path.LINETO)
+    path = Path(verts, codes)
+    patch = patches.PathPatch(path, facecolor="none", lw=1)
+    ax.add_patch(patch)
+    ax.scatter(X_t[3::2],X_t[4::2], marker='x', color='r')
     
     plt.pause(0.0001)
     plt.draw()
