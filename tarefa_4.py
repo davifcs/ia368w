@@ -26,7 +26,53 @@ mark_threshold = 300
 timespan = 1
 L_x = [0,  0,   920,  920,  4190,  4190, 4680,  4680, 4030, 0]
 L_y = [0,  2280, 2280, 3200, 3200,  2365, 2365,  650,    0, 0]
-
+landmarks = {
+"1" : {
+    "x" : 0,
+    "y" : 0,
+    "EQM" : []
+},
+"2" : {
+    "x" : 0,
+    "y" : 2280,
+    "EQM" : []
+},
+"3" : {
+    "x" : 920,
+    "y" : 2800,
+    "EQM" : []
+},
+"4" : {
+    "x" : 920,
+    "y" : 3200,
+    "EQM" : []
+},
+"5" : {
+    "x" : 4190,
+    "y" : 3200,
+    "EQM" : []
+},
+"6" : {
+    "x" : 4190,
+    "y" : 2365,
+    "EQM" : []
+},
+"7" : {
+    "x" : 4680,
+    "y" : 2365,
+    "EQM" : []
+},
+"8" : {
+    "x" : 4680,
+    "y" : 650,
+    "EQM" : []
+},
+"9" : {
+    "x" : 4030,
+    "y" : 0,
+    "EQM" : []
+}
+}
 def normAngle(angle):
     if angle > np.pi:
         angle = angle-2*np.pi
@@ -81,7 +127,8 @@ F[0][0] = 1
 F[1][1] = 1
 F[2][2] = 1
 
-while(count < 180):
+while(count < 10):
+    print("Iteração: ", count)
     pre_filter = datetime.now().timestamp()    
     #Prediction step
     l_vel,r_vel = getVel()
@@ -206,13 +253,26 @@ while(count < 180):
     patch = patches.PathPatch(path, facecolor="none", lw=1)
     ax.add_patch(patch)
     ax.scatter(X_t[3::2],X_t[4::2], marker='x', color='r')
-    
+
+    if X_t.size > 3:
+        for l_x,l_y in zip(L_x[1:],L_y[1:]):
+            dist = []
+            for x, y in zip(X_t[3::2], X_t[4::2]):
+                dist.append(np.sqrt((l_x-x)**2+(l_y-y)**2))
+            for index in landmarks:
+                if landmarks[index]['x'] == l_x and landmarks[index]['y'] == l_y:
+                    landmarks[index]['EQM'].append(min(dist))
+
     plt.pause(0.0001)
     plt.draw()
 
     count += 1
 fig.savefig("EKFSlam.png") 
 
+for index in landmarks:
+    plt.figure()
+    plt.plot(landmarks[index]['EQM'])
+    plt.savefig("Landmark "+index+".png")
 
     
 
