@@ -11,10 +11,10 @@ host = 'http://127.0.0.1:4950'
 restthru.http_init()
 
 heuristic = True
-Ks = 0.05
+Ks = 0.01
 b_axis = 165
-R_sigma_x = 5
-R_sigma_y = 5
+R_sigma_x = 0.5
+R_sigma_y = 0.5
 R_sigma_th = 0.5*np.pi/180
 sigma_l_d = 5
 sigma_l_theta = 0.1 * np.pi/180
@@ -22,8 +22,9 @@ range_min = -90
 range_max = 90
 range_step = 1
 laser_range = [range_min,range_max,range_step]
-mark_threshold = 300
+mark_threshold = 400
 timespan = 1
+iterations = 300
 L_x = [0,  0,   920,  920,  4190,  4190, 4680,  4680, 4030, 0]
 L_y = [0,  2280, 2280, 3200, 3200,  2365, 2365,  650,    0, 0]
 landmarks = {
@@ -39,7 +40,7 @@ landmarks = {
 },
 "3" : {
     "x" : 920,
-    "y" : 2800,
+    "y" : 2280,
     "EQM" : []
 },
 "4" : {
@@ -127,7 +128,7 @@ F[0][0] = 1
 F[1][1] = 1
 F[2][2] = 1
 
-while(count < 10):
+while(count < iterations):
     print("Iteração: ", count)
     pre_filter = datetime.now().timestamp()    
     #Prediction step
@@ -224,7 +225,7 @@ while(count < 10):
         zsensor_t = np.matrix([[np.sqrt(q)],[np.arctan2(delta_y,delta_x)-X_t[2]]])
         zreal_t = np.matrix([[r],[b]])
         K_t = np.dot(np.dot(sigma_t_,H_t.T),np.linalg.inv(np.dot(np.dot(H_t,sigma_t_),H_t.T)+Q_t))
-        INOVA = zsensor_t - zreal_t
+        INOVA = zreal_t - zsensor_t
         X_t = X_t.T + np.dot(K_t,INOVA)
         X_t = np.ravel( X_t[0][:] )
 
@@ -260,7 +261,7 @@ while(count < 10):
             for x, y in zip(X_t[3::2], X_t[4::2]):
                 dist.append(np.sqrt((l_x-x)**2+(l_y-y)**2))
             for index in landmarks:
-                if landmarks[index]['x'] == l_x and landmarks[index]['y'] == l_y:
+                if landmarks[index]['x'] == l_x and landmarks[index]['y'] == l_y and min(dist) < np.sqrt(2*mark_threshold**2):
                     landmarks[index]['EQM'].append(min(dist))
 
     plt.pause(0.0001)
@@ -272,6 +273,7 @@ fig.savefig("EKFSlam.png")
 for index in landmarks:
     plt.figure()
     plt.plot(landmarks[index]['EQM'])
+    print(index, "Min: ", min(landmarks[index]['EQM']), " EQM: ", sum(landmarks[index]['EQM'])/len(landmarks[index]['EQM']))
     plt.savefig("Landmark "+index+".png")
 
     
