@@ -273,6 +273,8 @@ fig.savefig("EKFSlam.png")
 for index in landmarks:
     plt.figure()
     plt.plot(landmarks[index]['EQM'])
+    plt.xlabel("Iterações")
+    plt.ylabel("Erro quadrático [mm]")
     print(index, "Min: ", min(landmarks[index]['EQM']), " EQM: ", sum(landmarks[index]['EQM'])/len(landmarks[index]['EQM']))
     plt.savefig("Landmark "+index+".png")
 
