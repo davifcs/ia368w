@@ -10,7 +10,6 @@ import matplotlib.patches as patches
 host = 'http://127.0.0.1:4950'
 restthru.http_init()
 
-heuristic = True
 Ks = 0.01
 b_axis = 165
 R_sigma_x = 0.5
@@ -28,52 +27,53 @@ iterations = 300
 L_x = [0,  0,   920,  920,  4190,  4190, 4680,  4680, 4030, 0]
 L_y = [0,  2280, 2280, 3200, 3200,  2365, 2365,  650,    0, 0]
 landmarks = {
-"1" : {
+1 : {
     "x" : 0,
     "y" : 0,
     "EQM" : []
 },
-"2" : {
+2 : {
     "x" : 0,
     "y" : 2280,
     "EQM" : []
 },
-"3" : {
+3 : {
     "x" : 920,
     "y" : 2280,
     "EQM" : []
 },
-"4" : {
+4 : {
     "x" : 920,
     "y" : 3200,
     "EQM" : []
 },
-"5" : {
+5 : {
     "x" : 4190,
     "y" : 3200,
     "EQM" : []
 },
-"6" : {
+6 : {
     "x" : 4190,
     "y" : 2365,
     "EQM" : []
 },
-"7" : {
+7 : {
     "x" : 4680,
     "y" : 2365,
     "EQM" : []
 },
-"8" : {
+8 : {
     "x" : 4680,
     "y" : 650,
     "EQM" : []
 },
-"9" : {
+9 : {
     "x" : 4030,
     "y" : 0,
     "EQM" : []
 }
 }
+
 def normAngle(angle):
     if angle > np.pi:
         angle = angle-2*np.pi
@@ -270,14 +270,19 @@ while(count < iterations):
     count += 1
 fig.savefig("EKFSlam.png") 
 
-for index in landmarks:
-    plt.figure()
-    plt.plot(landmarks[index]['EQM'])
-    plt.xlabel("Iterações")
-    plt.ylabel("Erro quadrático [mm]")
-    print(index, "Min: ", min(landmarks[index]['EQM']), " EQM: ", sum(landmarks[index]['EQM'])/len(landmarks[index]['EQM']))
-    plt.savefig("Landmark "+index+".png")
+fig, axs = plt.subplots(3,3,figsize=(20,20))
+index = 1
+for row in axs:
+    for col in row:
+        col.plot(landmarks[index]['EQM'])
+        col.set_title("Landmark " + str(index))
+        index+=1
+        print(index-1, "Min: ", min(landmarks[index-1]['EQM']), " EQM: ", sum(landmarks[index-1]['EQM'])/len(landmarks[index-1]['EQM']))
 
-    
+for ax in axs.flat:
+    ax.set(xlabel='Iterações', ylabel='Erro quadrático [mm]')
 
+for ax in axs.flat:
+    ax.label_outer()
 
+plt.savefig("Landmarks.png")
